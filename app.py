@@ -29,6 +29,7 @@ st.set_page_config(
     page_title="IDX Stock Screener",
     page_icon="📈",
     layout="wide",
+    initial_sidebar_state="expanded",  # supaya sidebar tidak ketutupan default di HP
 )
 
 DEFAULT_TICKERS = [
@@ -51,6 +52,14 @@ SECTOR_GROUPS = {
     "Konsumer": ["UNVR", "ICBP", "INDF", "MYOR", "KLBF", "CPIN", "GGRM", "HMSP"],
     "Properti": ["BSDE", "CTRA", "PWON", "SMRA", "ASRI"],
     "Teknologi & Digital": ["GOTO", "BUKA", "EMTK", "WIFI", "MTEL"],
+    "Telekomunikasi & Menara": ["TLKM", "ISAT", "EXCL", "TOWR", "MTEL"],
+    "Semen & Bahan Bangunan": ["SMGR", "INTP", "SMBR", "ARNA"],
+    "Farmasi & Kesehatan": ["KLBF", "SIDO", "MIKA", "HEAL", "SILO"],
+    "Ritel": ["AMRT", "MAPI", "ACES", "LPPF"],
+    "Perkebunan / CPO": ["LSIP", "AALI", "DSNG", "TBLA"],
+    "Otomotif & Komponen": ["ASII", "AUTO", "GJTL", "SMSM"],
+    "Infrastruktur & Transportasi": ["JSMR", "BIRD", "ASSA"],
+    "Asuransi & Multifinance": ["BFIN", "MFIN"],
 }
 
 KONGLO_GROUPS = {
@@ -413,10 +422,29 @@ group_tickers = (
     + [t for g in selected_konglo for t in KONGLO_GROUPS[g]]
 )
 
+st.sidebar.markdown("**Daftar ticker manual**")
+
+if "manual_tickers_text" not in st.session_state:
+    st.session_state["manual_tickers_text"] = ""  # kosong di awal, bukan auto-terisi
+
+
+def _load_default_tickers():
+    st.session_state["manual_tickers_text"] = ", ".join(DEFAULT_TICKERS)
+
+
+def _clear_manual_tickers():
+    st.session_state["manual_tickers_text"] = ""
+
+
+btn_col1, btn_col2 = st.sidebar.columns(2)
+btn_col1.button("📋 Muat Ticker Default", on_click=_load_default_tickers, use_container_width=True)
+btn_col2.button("🗑️ Kosongkan", on_click=_clear_manual_tickers, use_container_width=True)
+
 tickers_text = st.sidebar.text_area(
-    "Daftar ticker manual (pisahkan koma). Boleh tanpa .JK, akan ditambahkan otomatis",
-    value=", ".join(DEFAULT_TICKERS),
+    "Pisahkan koma. Boleh tanpa .JK, akan ditambahkan otomatis",
+    key="manual_tickers_text",
     height=140,
+    placeholder="Contoh: BBCA, TLKM, ASII ... atau kosongkan & cukup pilih sektor/grup di atas",
 )
 manual_tickers = [normalize_ticker(t) for t in tickers_text.split(",") if t.strip()]
 group_tickers_norm = [normalize_ticker(t) for t in group_tickers]
@@ -473,6 +501,12 @@ st.sidebar.caption(
 st.title("📈 IDX Stock Screener & Technical Signal")
 st.caption(f"Terakhir dimuat: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} · "
            f"Sumber data: Yahoo Finance (yfinance)")
+
+st.info(
+    "📱 **Pengguna HP**: pengaturan ticker & sektor ada di sidebar. Kalau tidak "
+    "terlihat, ketuk ikon **›** atau **☰** di pojok kiri atas layar untuk membukanya.",
+    icon="📱",
+)
 
 tab_screener, tab_chart, tab_flow, tab_guide = st.tabs(
     ["📊 Stock Screener", "📉 Chart Detail", "🌊 Foreign/Bandar Flow", "ℹ️ Panduan"]

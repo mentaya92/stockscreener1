@@ -59,18 +59,35 @@ untuk saham IDX.
 Sidebar punya dua bagian preset terpisah:
 
 1. **Sektor Bisnis** — Perbankan, Energi & Tambang, Konsumer, Properti,
-   Teknologi & Digital.
+   Teknologi & Digital, Telekomunikasi & Menara, Semen & Bahan Bangunan,
+   Farmasi & Kesehatan, Ritel, Perkebunan/CPO, Otomotif & Komponen,
+   Infrastruktur & Transportasi, Asuransi & Multifinance. Semua diisi saham
+   likuid/blue-chip di sektornya, bukan saham spekulatif.
 2. **Grup Konglomerasi / Taipan** — Grup Bakrie, Prajogo Pangestu/Barito,
    Salim Group, Djarum Group, Astra Group, MNC Group, Lippo Group, Emtek
    Group, Agung Sedayu (Aguan), Mayapada Group, dan beberapa taipan
    afiliasi tunggal (Avia Avian, Bayan, DCI Indonesia).
 
-Anda bisa pilih beberapa sekaligus dari kedua bagian; ticker-nya otomatis
+Kolom **daftar ticker manual** sekarang **kosong secara default** (tidak
+otomatis terisi), supaya tidak tumpang tindih membingungkan dengan
+sektor/grup yang Anda pilih. Ada dua tombol di atasnya:
+- **📋 Muat Ticker Default** — isi otomatis dengan 30 saham default.
+- **🗑️ Kosongkan** — bersihkan kolom manual.
+
+Anda bisa pilih beberapa sektor/grup sekaligus; ticker-nya otomatis
 digabung dengan daftar manual (duplikat dihilangkan). Semua daftar
 didefinisikan di `SECTOR_GROUPS` dan `KONGLO_GROUPS` dalam `app.py`, dan
 bisa Anda edit/tambah sendiri. Catatan: keanggotaan grup konglomerasi bisa
 berubah sewaktu-waktu (aksi korporasi, divestasi), jadi cek ulang
 keakuratannya secara berkala.
+
+## Penggunaan di HP / Mobile
+
+Sidebar (tempat semua pengaturan ticker) di-set default **terbuka**
+(`initial_sidebar_state="expanded"`), tapi di layar kecil browser kadang
+tetap menyembunyikannya. Ada banner pengingat di halaman utama yang
+mengarahkan pengguna untuk mengetuk ikon **›** atau **☰** di pojok kiri
+atas kalau sidebar tidak terlihat.
 
 ## Kenapa Data Historis Minimal 1 Tahun?
 
