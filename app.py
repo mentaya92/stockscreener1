@@ -517,37 +517,19 @@ with tab_screener:
     st.subheader("Ringkasan Sinyal Semua Saham")
     run = st.button("🔄 Jalankan Screener", type="primary")
 
-    if run:
-        if not tickers:
-            st.warning(
-                "Daftar ticker masih kosong. Pilih sektor/grup, masukkan ticker "
-                "manual, atau klik **📋 Muat Ticker Default** di sidebar."
-            )
-        else:
+    if run or "screener_result" in st.session_state:
+        if run:
             rows = []
-            failed_tickers = []
-            skipped_tickers = []
             progress = st.progress(0.0, text="Mengambil data...")
-
             for i, tk in enumerate(tickers):
                 try:
                     raw = fetch_data(tk, period=FETCH_PERIOD)
-
-                    if raw.empty:
-                        failed_tickers.append(f"{tk}: data kosong")
+                    if raw.empty or len(raw) < 60:
                         continue
-
-                    if len(raw) < 60:
-                        skipped_tickers.append(f"{tk}: hanya {len(raw)} hari data")
-                        continue
-
                     ind = compute_indicators(raw)
                     result = score_stock(ind)
-
                     if result is None:
-                        skipped_tickers.append(f"{tk}: indikator belum cukup")
                         continue
-
                     rows.append({
                         "Ticker": tk,
                         "Sinyal": result["signal"],
@@ -562,120 +544,51 @@ with tab_screener:
                         "Alasan": " | ".join(result["reasons"]),
                     })
                 except Exception as e:
-                    failed_tickers.append(f"{tk}: {e}")
-                finally:
-                    progress.progress(
-                        (i + 1) / len(tickers),
-                        text=f"Memproses {tk}..."
-                    )
-
+                    st.warning(f"Gagal ambil data {tk}: {e}")
+                progress.progress((i + 1) / len(tickers), text=f"Memproses {tk}...")
             progress.empty()
+            df_result = pd.DataFrame(rows).sort_values("Skor", ascending=False).reset_index(drop=True)
+            st.session_state["screener_result"] = df_result
 
-            if rows:
-                df_result = (
-                    pd.DataFrame(rows)
-                    .sort_values("Skor", ascending=False)
-                    .reset_index(drop=True)
-                )
-                st.session_state["screener_result"] = df_result
-                st.success(
-                    f"Selesai memproses {len(rows)} dari {len(tickers)} ticker."
-                )
-            else:
-                st.session_state.pop("screener_result", None)
-                st.warning(
-                    "Tidak ada saham yang berhasil diproses. Periksa daftar ticker "
-                    "dan koneksi data Yahoo Finance, lalu coba kembali."
-                )
-
-            if failed_tickers or skipped_tickers:
-                with st.expander(
-                    f"Detail ticker bermasalah "
-                    f"({len(failed_tickers) + len(skipped_tickers)})"
-                ):
-                    for message in failed_tickers:
-                        st.write(f"❌ {message}")
-                    for message in skipped_tickers:
-                        st.write(f"⚠️ {message}")
-
-    if "screener_result" in st.session_state:
         df_result = st.session_state["screener_result"]
 
-        if df_result.empty or "Skor" not in df_result.columns:
-            st.session_state.pop("screener_result", None)
-            st.warning(
-                "Hasil screener sebelumnya kosong atau tidak valid. "
-                "Silakan jalankan screener kembali."
-            )
-        else:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric(
-                "Strong Buy",
-                int((df_result["Sinyal"] == "Strong Buy").sum())
-            )
-            c2.metric(
-                "Buy",
-                int((df_result["Sinyal"] == "Buy").sum())
-            )
-            c3.metric(
-                "Hold/Watch",
-                int((df_result["Sinyal"] == "Hold/Watch").sum())
-            )
-            c4.metric(
-                "Sell/Strong Sell",
-                int(
-                    df_result["Sinyal"]
-                    .isin(["Sell", "Strong Sell"])
-                    .sum()
-                )
-            )
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Strong Buy", int((df_result["Sinyal"] == "Strong Buy").sum()))
+        c2.metric("Buy", int((df_result["Sinyal"] == "Buy").sum()))
+        c3.metric("Hold/Watch", int((df_result["Sinyal"] == "Hold/Watch").sum()))
+        c4.metric("Sell/Strong Sell", int(df_result["Sinyal"].isin(["Sell", "Strong Sell"]).sum()))
 
-            def highlight_signal(row):
-                color = SIGNAL_COLOR.get(row["Sinyal"], "#ffffff")
-                return [f"background-color: {color}22"] * len(row)
+        def highlight_signal(row):
+            color = SIGNAL_COLOR.get(row["Sinyal"], "#ffffff")
+            return [f"background-color: {color}22"] * len(row)
 
-            st.dataframe(
-                df_result.style.apply(highlight_signal, axis=1).format({
-                    "Close": "{:,.0f}",
-                    "Chg %": "{:,.2f}",
-                    "RSI14": "{:,.1f}",
-                    "Vol Ratio": "{:,.2f}",
-                    "Stop Loss": "{:,.0f}",
-                    "Take Profit": "{:,.0f}",
-                    "R:R": "1 : {:,.2f}",
-                }, na_rep="-"),
-                use_container_width=True,
-                height=560,
-            )
-            st.caption(
-                "**R:R (Risk:Reward)** = potensi profit ke Take Profit dibagi "
-                "potensi rugi ke Stop Loss. R:R ≥ 1.5 umumnya dianggap sehat "
-                "secara manajemen risiko, tapi tetap cek konteks chart-nya sendiri."
-            )
-            st.caption(
-                "Klik header kolom untuk mengurutkan. Buka tab 'Chart Detail' "
-                "untuk analisis per saham."
-            )
-    elif not run:
-        st.info(
-            "Pilih ticker di sidebar, lalu klik **Jalankan Screener** untuk "
-            "mengambil data dan menghitung sinyal."
+        st.dataframe(
+            df_result.style.apply(highlight_signal, axis=1).format({
+                "Close": "{:,.0f}",
+                "Chg %": "{:,.2f}",
+                "RSI14": "{:,.1f}",
+                "Vol Ratio": "{:,.2f}",
+                "Stop Loss": "{:,.0f}",
+                "Take Profit": "{:,.0f}",
+                "R:R": "1 : {:,.2f}",
+            }, na_rep="-"),
+            use_container_width=True,
+            height=560,
         )
+        st.caption(
+            "**R:R (Risk:Reward)** = potensi profit ke Take Profit dibagi potensi rugi ke "
+            "Stop Loss. R:R ≥ 1.5 umumnya dianggap sehat secara manajemen risiko, tapi tetap "
+            "cek konteks chart-nya sendiri."
+        )
+        st.caption("Klik header kolom untuk mengurutkan. Buka tab 'Chart Detail' untuk analisis per saham.")
+    else:
+        st.info("Klik **Jalankan Screener** untuk mengambil data & menghitung sinyal semua ticker di sidebar.")
 
 # ---------------- TAB 2: CHART DETAIL ----------------
 with tab_chart:
     st.subheader("Analisis Teknikal Per Saham")
-
-    if not tickers:
-        st.info(
-            "Tambahkan ticker manual atau pilih sektor/grup di sidebar "
-            "untuk membuka chart detail."
-        )
-        sel_ticker = None
-    else:
-        sel_ticker = st.selectbox("Pilih ticker", tickers)
-
-    if st.button("Muat Chart", disabled=not tickers):
+    sel_ticker = st.selectbox("Pilih ticker", tickers)
+    if st.button("Muat Chart"):
         with st.spinner(f"Mengambil data {sel_ticker}..."):
             raw = fetch_data(sel_ticker, period=FETCH_PERIOD)
             if raw.empty:
@@ -793,4 +706,3 @@ Sell (-39 s/d -15) · Strong Sell (≤-40)
 - Gratis online: push ke GitHub lalu deploy via [share.streamlit.io](https://share.streamlit.io)
         """
     )
-
