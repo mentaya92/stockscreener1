@@ -14,9 +14,12 @@ berdasarkan analisis teknikal otomatis, memakai data harga dari **yfinance**.
 - **Stock Screener**: memberi skor (-100 s/d 100) dan sinyal
   (Strong Buy / Buy / Hold / Sell / Strong Sell) untuk daftar saham yang
   Anda tentukan, berdasarkan harga penutupan terakhir.
+- **Risk : Reward otomatis**: Stop Loss & Take Profit dihitung dari support/
+  resistance terdekat (bukan sekadar kelipatan ATR tetap), sehingga rasio
+  R:R benar-benar berbeda-beda sesuai struktur harga tiap saham.
 - **Chart Detail**: candlestick + MA20/50/200, Bollinger Bands, Volume, RSI,
-  MACD untuk satu saham, lengkap dengan estimasi stop loss & take profit
-  berbasis ATR.
+  MACD untuk satu saham, lengkap dengan estimasi stop loss, take profit,
+  dan risk:reward berbasis ATR.
 - **Foreign / Bandar Flow**: modul upload CSV untuk memvisualisasikan net
   foreign flow (data ini tidak tersedia gratis di yfinance — lihat catatan
   di bawah).
@@ -50,6 +53,20 @@ Edit `DEFAULT_TICKERS` di `app.py`, atau langsung ubah lewat sidebar aplikasi
 saat berjalan. Anda **boleh menulis ticker tanpa `.JK`** (mis. cukup `BBCA`),
 aplikasi akan otomatis menambahkan suffix `.JK` yang dibutuhkan Yahoo Finance
 untuk saham IDX.
+
+### Grup Ticker Cepat
+
+Selain daftar manual, sidebar punya multiselect **"Tambah cepat dari grup
+ticker"** berisi preset sektor & grup afiliasi:
+
+- Perbankan, Energi & Tambang, Konsumer, Properti, Teknologi & Digital
+- Grup Bakrie, Grup Prajogo Pangestu / Barito
+
+Ticker dari grup yang dipilih otomatis digabung dengan daftar manual
+(duplikat dihilangkan). Daftar ini didefinisikan di `TICKER_GROUPS` dalam
+`app.py` dan bisa Anda edit/tambah sendiri. Catatan: keanggotaan grup
+konglomerasi bisa berubah sewaktu-waktu (aksi korporasi, divestasi), jadi
+cek ulang keakuratannya secara berkala.
 
 ## Kenapa Data Historis Minimal 1 Tahun?
 

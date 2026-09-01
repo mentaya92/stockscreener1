@@ -39,6 +39,20 @@ DEFAULT_TICKERS = [
     "TPIA.JK", "ITMG.JK", "INCO.JK", "AKRA.JK", "MEDC.JK", "BUKA.JK",
 ]
 
+# Preset grup ticker untuk mempercepat screening ke tema/afiliasi tertentu.
+# Catatan: struktur kepemilikan & keanggotaan grup bisa berubah sewaktu-waktu
+# (aksi korporasi, divestasi, dll) -- selalu cek ulang sebelum benar-benar
+# mengandalkan pengelompokan ini untuk keputusan trading.
+TICKER_GROUPS = {
+    "Perbankan": ["BBCA", "BBRI", "BMRI", "BBNI", "BBTN", "BRIS", "ARTO", "BJBR", "BJTM", "BNGA"],
+    "Energi & Tambang": ["PGAS", "MEDC", "ADRO", "PTBA", "ITMG", "ELSA", "AKRA", "INDY", "ANTM", "INCO"],
+    "Konsumer": ["UNVR", "ICBP", "INDF", "MYOR", "KLBF", "CPIN", "GGRM", "HMSP"],
+    "Properti": ["BSDE", "CTRA", "PWON", "SMRA", "ASRI"],
+    "Teknologi & Digital": ["GOTO", "BUKA", "EMTK", "WIFI", "MTEL"],
+    "Grup Bakrie": ["BNBR", "BUMI", "BRMS", "ENRG", "DEWA", "UNSP", "ELTY", "VKTR", "VIVA"],
+    "Grup Prajogo Pangestu / Barito": ["BRPT", "TPIA", "BREN", "CUAN", "PTRO", "CDIA"],
+}
+
 # ----------------------------------------------------------------------------
 # INDIKATOR TEKNIKAL (dihitung manual pakai pandas/numpy, tanpa lib tambahan)
 # ----------------------------------------------------------------------------
@@ -125,6 +139,58 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 # ----------------------------------------------------------------------------
 # SCORING / SIGNAL ENGINE (rule-based, transparan & bisa diaudit)
 # ----------------------------------------------------------------------------
+
+def compute_stop_take_levels(df: pd.DataFrame, lookback: int = 40, max_stop_pct: float = 0.10):
+    """
+    Menentukan Stop Loss & Take Profit dengan mempertimbangkan struktur harga
+    (swing low/high terdekat), bukan cuma kelipatan ATR tetap -- supaya
+    Risk:Reward benar-benar bervariasi antar saham sesuai levelnya masing-masing.
+
+    - Take Profit: resistance terdekat (swing high N hari terakhir) jika ada
+      di atas harga; kalau tidak ada (harga breakout ke level tertinggi),
+      pakai proyeksi ATR sebagai fallback.
+    - Stop Loss: support terdekat (swing low N hari terakhir) jika jaraknya
+      wajar (<= max_stop_pct dari harga); kalau support terlalu jauh/tidak
+      ada, pakai proyeksi ATR sebagai fallback.
+    """
+    last = df.iloc[-1]
+    close = last["Close"]
+    atr_val = last["ATR14"] if pd.notna(last["ATR14"]) else close * 0.02
+
+    atr_stop = close - 1.5 * atr_val
+    atr_target = close + 2.0 * atr_val
+
+    window = df.iloc[-(lookback + 1):-1]  # N hari sebelum hari terakhir
+    swing_low = window["Low"].min() if len(window) else np.nan
+    swing_high = window["High"].max() if len(window) else np.nan
+
+    # Stop loss: pakai support struktural kalau jaraknya masih wajar
+    if pd.notna(swing_low) and swing_low < close:
+        candidate = swing_low * 0.995
+        if (close - candidate) / close <= max_stop_pct:
+            stop_loss = candidate
+        else:
+            stop_loss = atr_stop
+    else:
+        stop_loss = atr_stop
+
+    # Take profit: pakai resistance terdekat kalau masih di atas harga saat ini
+    if pd.notna(swing_high) and swing_high > close:
+        take_profit = swing_high * 0.995
+    else:
+        take_profit = atr_target
+
+    # Jaga-jaga: TP minimal setara proyeksi ATR, SL tidak boleh sama/lebih besar dari harga
+    take_profit = max(take_profit, atr_target)
+    if stop_loss >= close:
+        stop_loss = atr_stop
+
+    risk = close - stop_loss
+    reward = take_profit - close
+    rr_ratio = reward / risk if risk > 0 else np.nan
+
+    return stop_loss, take_profit, rr_ratio
+
 
 def score_stock(df: pd.DataFrame) -> dict:
     """Menghasilkan skor -100..100 berdasarkan kombinasi indikator teknikal."""
@@ -216,9 +282,7 @@ def score_stock(df: pd.DataFrame) -> dict:
         signal = "Strong Sell"
 
     close = last["Close"]
-    atr_val = last["ATR14"] if pd.notna(last["ATR14"]) else close * 0.02
-    stop_loss = close - 1.5 * atr_val
-    take_profit = close + 2.0 * atr_val
+    stop_loss, take_profit, rr_ratio = compute_stop_take_levels(df)
     change_pct = (last["Close"] / prev["Close"] - 1) * 100
 
     return {
@@ -230,6 +294,7 @@ def score_stock(df: pd.DataFrame) -> dict:
         "vol_ratio": vol_ratio,
         "stop_loss": stop_loss,
         "take_profit": take_profit,
+        "rr_ratio": rr_ratio,
         "reasons": reasons,
     }
 
@@ -307,12 +372,31 @@ def normalize_ticker(t: str) -> str:
 
 
 st.sidebar.title("⚙️ Pengaturan")
+
+st.sidebar.markdown("**Tambah cepat dari grup ticker**")
+selected_groups = st.sidebar.multiselect(
+    "Pilih satu atau beberapa grup (opsional)",
+    list(TICKER_GROUPS.keys()),
+    help="Ticker dari grup yang dipilih akan digabung otomatis dengan daftar manual di bawah.",
+)
+group_tickers = [t for g in selected_groups for t in TICKER_GROUPS[g]]
+
 tickers_text = st.sidebar.text_area(
-    "Daftar ticker (pisahkan koma). Boleh tanpa .JK, akan ditambahkan otomatis",
+    "Daftar ticker manual (pisahkan koma). Boleh tanpa .JK, akan ditambahkan otomatis",
     value=", ".join(DEFAULT_TICKERS),
     height=140,
 )
-tickers = [normalize_ticker(t) for t in tickers_text.split(",") if t.strip()]
+manual_tickers = [normalize_ticker(t) for t in tickers_text.split(",") if t.strip()]
+group_tickers_norm = [normalize_ticker(t) for t in group_tickers]
+
+# Gabungkan manual + grup, hilangkan duplikat, pertahankan urutan
+tickers = list(dict.fromkeys(manual_tickers + group_tickers_norm))
+
+if selected_groups:
+    st.sidebar.caption(
+        f"➕ {len(group_tickers_norm)} ticker dari grup terpilih ditambahkan "
+        f"(total sekarang: {len(tickers)} ticker unik)."
+    )
 
 # Periode fetch data historis: dibuat cukup panjang (fixed) agar MA50/MA200,
 # RSI, MACD dsb tetap akurat -- indikator ini butuh data historis minimal
@@ -390,6 +474,7 @@ with tab_screener:
                         "Vol Ratio": result["vol_ratio"],
                         "Stop Loss": result["stop_loss"],
                         "Take Profit": result["take_profit"],
+                        "R:R": result["rr_ratio"],
                         "Alasan": " | ".join(result["reasons"]),
                     })
                 except Exception as e:
@@ -419,9 +504,15 @@ with tab_screener:
                 "Vol Ratio": "{:,.2f}",
                 "Stop Loss": "{:,.0f}",
                 "Take Profit": "{:,.0f}",
+                "R:R": "1 : {:,.2f}",
             }, na_rep="-"),
             use_container_width=True,
             height=560,
+        )
+        st.caption(
+            "**R:R (Risk:Reward)** = potensi profit ke Take Profit dibagi potensi rugi ke "
+            "Stop Loss. R:R ≥ 1.5 umumnya dianggap sehat secara manajemen risiko, tapi tetap "
+            "cek konteks chart-nya sendiri."
         )
         st.caption("Klik header kolom untuk mengurutkan. Buka tab 'Chart Detail' untuk analisis per saham.")
     else:
@@ -446,11 +537,13 @@ with tab_chart:
                         f"(Skor: {result['score']})",
                         unsafe_allow_html=True,
                     )
-                    m1, m2, m3, m4 = st.columns(4)
+                    m1, m2, m3, m4, m5 = st.columns(5)
                     m1.metric("Close Terakhir", f"{result['close']:,.0f}", f"{result['change_pct']:.2f}%")
                     m2.metric("RSI14", f"{result['rsi']:.1f}")
                     m3.metric("Stop Loss (est.)", f"{result['stop_loss']:,.0f}")
                     m4.metric("Take Profit (est.)", f"{result['take_profit']:,.0f}")
+                    rr_display = f"1 : {result['rr_ratio']:.2f}" if pd.notna(result['rr_ratio']) else "-"
+                    m5.metric("Risk : Reward", rr_display)
                     with st.expander("Alasan skor teknikal"):
                         for r in result["reasons"]:
                             st.write("• " + r)
