@@ -56,17 +56,21 @@ untuk saham IDX.
 
 ### Grup Ticker Cepat
 
-Selain daftar manual, sidebar punya multiselect **"Tambah cepat dari grup
-ticker"** berisi preset sektor & grup afiliasi:
+Sidebar punya dua bagian preset terpisah:
 
-- Perbankan, Energi & Tambang, Konsumer, Properti, Teknologi & Digital
-- Grup Bakrie, Grup Prajogo Pangestu / Barito
+1. **Sektor Bisnis** — Perbankan, Energi & Tambang, Konsumer, Properti,
+   Teknologi & Digital.
+2. **Grup Konglomerasi / Taipan** — Grup Bakrie, Prajogo Pangestu/Barito,
+   Salim Group, Djarum Group, Astra Group, MNC Group, Lippo Group, Emtek
+   Group, Agung Sedayu (Aguan), Mayapada Group, dan beberapa taipan
+   afiliasi tunggal (Avia Avian, Bayan, DCI Indonesia).
 
-Ticker dari grup yang dipilih otomatis digabung dengan daftar manual
-(duplikat dihilangkan). Daftar ini didefinisikan di `TICKER_GROUPS` dalam
-`app.py` dan bisa Anda edit/tambah sendiri. Catatan: keanggotaan grup
-konglomerasi bisa berubah sewaktu-waktu (aksi korporasi, divestasi), jadi
-cek ulang keakuratannya secara berkala.
+Anda bisa pilih beberapa sekaligus dari kedua bagian; ticker-nya otomatis
+digabung dengan daftar manual (duplikat dihilangkan). Semua daftar
+didefinisikan di `SECTOR_GROUPS` dan `KONGLO_GROUPS` dalam `app.py`, dan
+bisa Anda edit/tambah sendiri. Catatan: keanggotaan grup konglomerasi bisa
+berubah sewaktu-waktu (aksi korporasi, divestasi), jadi cek ulang
+keakuratannya secara berkala.
 
 ## Kenapa Data Historis Minimal 1 Tahun?
 

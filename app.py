@@ -41,17 +41,36 @@ DEFAULT_TICKERS = [
 
 # Preset grup ticker untuk mempercepat screening ke tema/afiliasi tertentu.
 # Catatan: struktur kepemilikan & keanggotaan grup bisa berubah sewaktu-waktu
-# (aksi korporasi, divestasi, dll) -- selalu cek ulang sebelum benar-benar
-# mengandalkan pengelompokan ini untuk keputusan trading.
-TICKER_GROUPS = {
+# (aksi korporasi, divestasi, dll) -- semua daftar di bawah sudah dicek lewat
+# pencarian berita/riset publik terbaru, tapi tetap cek ulang berkala sebelum
+# benar-benar mengandalkannya untuk keputusan trading.
+
+SECTOR_GROUPS = {
     "Perbankan": ["BBCA", "BBRI", "BMRI", "BBNI", "BBTN", "BRIS", "ARTO", "BJBR", "BJTM", "BNGA"],
     "Energi & Tambang": ["PGAS", "MEDC", "ADRO", "PTBA", "ITMG", "ELSA", "AKRA", "INDY", "ANTM", "INCO"],
     "Konsumer": ["UNVR", "ICBP", "INDF", "MYOR", "KLBF", "CPIN", "GGRM", "HMSP"],
     "Properti": ["BSDE", "CTRA", "PWON", "SMRA", "ASRI"],
     "Teknologi & Digital": ["GOTO", "BUKA", "EMTK", "WIFI", "MTEL"],
-    "Grup Bakrie": ["BNBR", "BUMI", "BRMS", "ENRG", "DEWA", "UNSP", "ELTY", "VKTR", "VIVA"],
-    "Grup Prajogo Pangestu / Barito": ["BRPT", "TPIA", "BREN", "CUAN", "PTRO", "CDIA"],
 }
+
+KONGLO_GROUPS = {
+    "Aburizal Bakrie (Grup Bakrie)": ["BNBR", "BUMI", "BRMS", "ENRG", "DEWA", "UNSP", "ELTY", "VKTR", "VIVA"],
+    "Prajogo Pangestu (Barito Group)": ["BRPT", "TPIA", "BREN", "CUAN", "PTRO", "CDIA"],
+    "Anthony Salim (Salim Group)": ["INDF", "ICBP", "SIMP", "LSIP", "IMAS", "DNET", "DCII", "META"],
+    "Hartono Bersaudara (Djarum Group)": ["BBCA", "TOWR", "SUPR", "BELI", "RANC", "DATA", "HEAL"],
+    "Astra Group": ["ASII", "UNTR", "AALI", "AUTO", "ASGR", "ACST"],
+    "Hary Tanoesoedibjo (MNC Group)": ["BHIT", "BMTR", "MNCN", "MSIN", "IPTV", "MSKY", "BCAP", "BABP", "KPIG"],
+    "James Riady (Lippo Group)": ["LPKR", "LPPF", "SILO", "MLPL", "NOBU"],
+    "Eddy Sariaatmadja (Emtek Group)": ["EMTK", "SCMA", "BUKA", "BBHI", "SAME", "RSGK", "CASS"],
+    "Aguan & Grup Agung Sedayu": ["PANI", "CBDK"],
+    "Dato Sri Tahir (Mayapada Group)": ["MAYA", "SRAJ"],
+    "Hermanto Tanoko (Avia Avian)": ["AVIA"],
+    "Low Tuck Kwong (Bayan Group)": ["BYAN"],
+    "Otto Toto Sugiri (DCI Indonesia)": ["DCII"],
+}
+
+# Digabung supaya kompatibel dengan kode lain yang mengacu TICKER_GROUPS
+TICKER_GROUPS = {**SECTOR_GROUPS, **KONGLO_GROUPS}
 
 # ----------------------------------------------------------------------------
 # INDIKATOR TEKNIKAL (dihitung manual pakai pandas/numpy, tanpa lib tambahan)
@@ -373,13 +392,26 @@ def normalize_ticker(t: str) -> str:
 
 st.sidebar.title("⚙️ Pengaturan")
 
-st.sidebar.markdown("**Tambah cepat dari grup ticker**")
-selected_groups = st.sidebar.multiselect(
-    "Pilih satu atau beberapa grup (opsional)",
-    list(TICKER_GROUPS.keys()),
-    help="Ticker dari grup yang dipilih akan digabung otomatis dengan daftar manual di bawah.",
+st.sidebar.markdown("**Tambah cepat: Sektor Bisnis**")
+selected_sectors = st.sidebar.multiselect(
+    "Pilih satu atau beberapa sektor (opsional)",
+    list(SECTOR_GROUPS.keys()),
+    key="sector_multiselect",
 )
-group_tickers = [t for g in selected_groups for t in TICKER_GROUPS[g]]
+
+st.sidebar.markdown("**Tambah cepat: Grup Konglomerasi / Taipan**")
+selected_konglo = st.sidebar.multiselect(
+    "Pilih satu atau beberapa grup (opsional)",
+    list(KONGLO_GROUPS.keys()),
+    key="konglo_multiselect",
+    help="Keanggotaan grup bisa berubah sewaktu-waktu (aksi korporasi, divestasi dll). "
+         "Sudah dicek lewat riset publik terbaru, tapi tetap verifikasi ulang secara berkala.",
+)
+
+group_tickers = (
+    [t for g in selected_sectors for t in SECTOR_GROUPS[g]]
+    + [t for g in selected_konglo for t in KONGLO_GROUPS[g]]
+)
 
 tickers_text = st.sidebar.text_area(
     "Daftar ticker manual (pisahkan koma). Boleh tanpa .JK, akan ditambahkan otomatis",
@@ -392,9 +424,9 @@ group_tickers_norm = [normalize_ticker(t) for t in group_tickers]
 # Gabungkan manual + grup, hilangkan duplikat, pertahankan urutan
 tickers = list(dict.fromkeys(manual_tickers + group_tickers_norm))
 
-if selected_groups:
+if selected_sectors or selected_konglo:
     st.sidebar.caption(
-        f"➕ {len(group_tickers_norm)} ticker dari grup terpilih ditambahkan "
+        f"➕ {len(group_tickers_norm)} ticker dari sektor/grup terpilih ditambahkan "
         f"(total sekarang: {len(tickers)} ticker unik)."
     )
 
