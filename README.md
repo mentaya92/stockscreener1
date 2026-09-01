@@ -47,8 +47,21 @@ Browser akan otomatis terbuka di `http://localhost:8501`.
 ## Kustomisasi Daftar Saham
 
 Edit `DEFAULT_TICKERS` di `app.py`, atau langsung ubah lewat sidebar aplikasi
-saat berjalan. Format ticker IDX di Yahoo Finance selalu diakhiri `.JK`,
-contoh: `BBCA.JK`, `TLKM.JK`.
+saat berjalan. Anda **boleh menulis ticker tanpa `.JK`** (mis. cukup `BBCA`),
+aplikasi akan otomatis menambahkan suffix `.JK` yang dibutuhkan Yahoo Finance
+untuk saham IDX.
+
+## Kenapa Data Historis Minimal 1 Tahun?
+
+Indikator seperti MA50 dan MA200 butuh minimal 50-200 hari data historis
+untuk bisa dihitung; kalau data terlalu pendek (mis. 1 minggu/1 bulan),
+sinyal scoring tidak bisa dihasilkan sama sekali. Karena itu aplikasi ini
+**selalu mengambil data 1 tahun penuh di belakang layar** untuk perhitungan
+indikator, terlepas dari periode yang Anda pilih untuk *tampilan* chart.
+
+Selector **"Periode tampilan chart"** di sidebar hanya memperbesar (zoom)
+rentang hari yang terlihat di grafik (1 minggu s/d 1 tahun) — tidak
+memengaruhi keakuratan indikator maupun sinyal.
 
 ## Tentang Foreign Flow / Bandarmology
 

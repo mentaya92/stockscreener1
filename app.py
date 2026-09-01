@@ -247,6 +247,10 @@ SIGNAL_COLOR = {
 }
 
 
+PRICE_HOVER = "%{y:,.0f}<extra></extra>"
+RATIO_HOVER = "%{y:,.2f}<extra></extra>"
+
+
 def render_candlestick(df: pd.DataFrame, ticker: str):
     fig = make_subplots(
         rows=3, cols=1, shared_xaxes=True,
@@ -257,26 +261,36 @@ def render_candlestick(df: pd.DataFrame, ticker: str):
     fig.add_trace(go.Candlestick(
         x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
         name="Price"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df["MA20"], name="MA20", line=dict(width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df["MA50"], name="MA50", line=dict(width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df["MA200"], name="MA200", line=dict(width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df["MA20"], name="MA20", line=dict(width=1),
+                              hovertemplate=PRICE_HOVER), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df["MA50"], name="MA50", line=dict(width=1),
+                              hovertemplate=PRICE_HOVER), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df["MA200"], name="MA200", line=dict(width=1),
+                              hovertemplate=PRICE_HOVER), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["BB_upper"], name="BB Upper",
-                              line=dict(width=1, dash="dot"), opacity=0.5), row=1, col=1)
+                              line=dict(width=1, dash="dot"), opacity=0.5,
+                              hovertemplate=PRICE_HOVER), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["BB_lower"], name="BB Lower",
                               line=dict(width=1, dash="dot"), opacity=0.5,
-                              fill="tonexty"), row=1, col=1)
+                              fill="tonexty", hovertemplate=PRICE_HOVER), row=1, col=1)
 
     vol_colors = np.where(df["Close"] >= df["Open"], "#34a853", "#e8710a")
-    fig.add_trace(go.Bar(x=df.index, y=df["Volume"], name="Volume", marker_color=vol_colors), row=2, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df["Vol_MA20"], name="Vol MA20", line=dict(width=1)), row=2, col=1)
+    fig.add_trace(go.Bar(x=df.index, y=df["Volume"], name="Volume", marker_color=vol_colors,
+                          hovertemplate="%{y:,.0f}<extra></extra>"), row=2, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df["Vol_MA20"], name="Vol MA20", line=dict(width=1),
+                              hovertemplate="%{y:,.0f}<extra></extra>"), row=2, col=1)
 
-    fig.add_trace(go.Scatter(x=df.index, y=df["RSI14"], name="RSI14", line=dict(width=1.3, color="#7c4dff")), row=3, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df["RSI14"], name="RSI14", line=dict(width=1.3, color="#7c4dff"),
+                              hovertemplate=RATIO_HOVER), row=3, col=1)
     fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.4, row=3, col=1)
     fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.4, row=3, col=1)
 
     fig.update_layout(height=800, xaxis_rangeslider_visible=False,
                        legend=dict(orientation="h", yanchor="bottom", y=1.02),
                        margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_yaxes(tickformat=",.0f", row=1, col=1)
+    fig.update_yaxes(tickformat=",.0f", row=2, col=1)
+    fig.update_yaxes(tickformat=",.1f", row=3, col=1)
     return fig
 
 
@@ -284,15 +298,48 @@ def render_candlestick(df: pd.DataFrame, ticker: str):
 # SIDEBAR
 # ----------------------------------------------------------------------------
 
+def normalize_ticker(t: str) -> str:
+    """Tambahkan otomatis .JK jika belum ada suffix bursa (default: IDX)."""
+    t = t.strip().upper()
+    if "." not in t:
+        t = f"{t}.JK"
+    return t
+
+
 st.sidebar.title("⚙️ Pengaturan")
 tickers_text = st.sidebar.text_area(
-    "Daftar ticker (pisahkan koma, format IDX.JK)",
+    "Daftar ticker (pisahkan koma). Boleh tanpa .JK, akan ditambahkan otomatis",
     value=", ".join(DEFAULT_TICKERS),
     height=140,
 )
-tickers = [t.strip().upper() for t in tickers_text.split(",") if t.strip()]
+tickers = [normalize_ticker(t) for t in tickers_text.split(",") if t.strip()]
 
-period = st.sidebar.selectbox("Periode data", ["6mo", "1y", "2y"], index=1)
+# Periode fetch data historis: dibuat cukup panjang (fixed) agar MA50/MA200,
+# RSI, MACD dsb tetap akurat -- indikator ini butuh data historis minimal
+# 50-200 hari, sehingga tidak bisa dipersingkat jadi 1 minggu/1 bulan tanpa
+# merusak perhitungan sinyal.
+FETCH_PERIOD = "1y"
+
+# Periode TAMPILAN chart (hanya memotong jumlah hari yang di-plot, tidak
+# memengaruhi akurasi perhitungan indikator karena data historis penuh
+# tetap diambil di background).
+DISPLAY_PERIOD_DAYS = {
+    "1 minggu": 5,
+    "2 minggu": 10,
+    "1 bulan": 22,
+    "3 bulan": 66,
+    "6 bulan": 130,
+    "1 tahun": 260,
+}
+display_period_label = st.sidebar.selectbox(
+    "Periode tampilan chart", list(DISPLAY_PERIOD_DAYS.keys()), index=4
+)
+
+st.sidebar.caption(
+    "ℹ️ Data historis tetap diambil penuh (1 tahun) di belakang layar agar "
+    "MA50/MA200/RSI/MACD akurat. 'Periode tampilan' di atas hanya memperbesar "
+    "(zoom) rentang hari yang terlihat di chart, bukan mengurangi data hitung."
+)
 
 st.sidebar.markdown("---")
 st.sidebar.caption(
@@ -326,7 +373,7 @@ with tab_screener:
             progress = st.progress(0.0, text="Mengambil data...")
             for i, tk in enumerate(tickers):
                 try:
-                    raw = fetch_data(tk, period=period)
+                    raw = fetch_data(tk, period=FETCH_PERIOD)
                     if raw.empty or len(raw) < 60:
                         continue
                     ind = compute_indicators(raw)
@@ -337,12 +384,12 @@ with tab_screener:
                         "Ticker": tk,
                         "Sinyal": result["signal"],
                         "Skor": result["score"],
-                        "Close": round(result["close"], 0),
-                        "Chg %": round(result["change_pct"], 2),
-                        "RSI14": round(result["rsi"], 1),
-                        "Vol Ratio": round(result["vol_ratio"], 2) if pd.notna(result["vol_ratio"]) else None,
-                        "Stop Loss": round(result["stop_loss"], 0),
-                        "Take Profit": round(result["take_profit"], 0),
+                        "Close": result["close"],
+                        "Chg %": result["change_pct"],
+                        "RSI14": result["rsi"],
+                        "Vol Ratio": result["vol_ratio"],
+                        "Stop Loss": result["stop_loss"],
+                        "Take Profit": result["take_profit"],
                         "Alasan": " | ".join(result["reasons"]),
                     })
                 except Exception as e:
@@ -365,7 +412,14 @@ with tab_screener:
             return [f"background-color: {color}22"] * len(row)
 
         st.dataframe(
-            df_result.style.apply(highlight_signal, axis=1),
+            df_result.style.apply(highlight_signal, axis=1).format({
+                "Close": "{:,.0f}",
+                "Chg %": "{:,.2f}",
+                "RSI14": "{:,.1f}",
+                "Vol Ratio": "{:,.2f}",
+                "Stop Loss": "{:,.0f}",
+                "Take Profit": "{:,.0f}",
+            }, na_rep="-"),
             use_container_width=True,
             height=560,
         )
@@ -379,9 +433,9 @@ with tab_chart:
     sel_ticker = st.selectbox("Pilih ticker", tickers)
     if st.button("Muat Chart"):
         with st.spinner(f"Mengambil data {sel_ticker}..."):
-            raw = fetch_data(sel_ticker, period=period)
+            raw = fetch_data(sel_ticker, period=FETCH_PERIOD)
             if raw.empty:
-                st.error("Data tidak ditemukan. Cek kembali format ticker (harus diakhiri .JK).")
+                st.error("Data tidak ditemukan. Cek kembali kode ticker Anda.")
             else:
                 ind = compute_indicators(raw)
                 result = score_stock(ind)
@@ -400,7 +454,8 @@ with tab_chart:
                     with st.expander("Alasan skor teknikal"):
                         for r in result["reasons"]:
                             st.write("• " + r)
-                st.plotly_chart(render_candlestick(ind.tail(180), sel_ticker), use_container_width=True)
+                n_days = DISPLAY_PERIOD_DAYS[display_period_label]
+                st.plotly_chart(render_candlestick(ind.tail(n_days), sel_ticker), use_container_width=True)
 
 # ---------------- TAB 3: FOREIGN / BANDAR FLOW ----------------
 with tab_flow:
