@@ -40,13 +40,6 @@ streamlit run app.py
 
 Browser akan otomatis terbuka di `http://localhost:8501`.
 
-## Deploy Online (Gratis)
-
-1. Push folder ini ke repository GitHub.
-2. Buka [share.streamlit.io](https://share.streamlit.io), hubungkan ke repo,
-   pilih `app.py` sebagai entry point.
-3. Aplikasi akan dapat diakses via URL publik, bisa dibuka dari HP.
-
 ## Kustomisasi Daftar Saham
 
 Edit `DEFAULT_TICKERS` di `app.py`, atau langsung ubah lewat sidebar aplikasi

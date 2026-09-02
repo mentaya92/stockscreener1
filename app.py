@@ -20,7 +20,9 @@ import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+WIB = timezone(timedelta(hours=7))
 
 # ----------------------------------------------------------------------------
 # KONFIGURASI HALAMAN
@@ -499,7 +501,7 @@ st.sidebar.caption(
 # ----------------------------------------------------------------------------
 
 st.title("📈 IDX Stock Screener & Technical Signal")
-st.caption(f"Terakhir dimuat: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} · "
+st.caption(f"Terakhir dimuat: {datetime.now(WIB).strftime('%Y-%m-%d %H:%M:%S')} WIB · "
            f"Sumber data: Yahoo Finance (yfinance)")
 
 st.info(
@@ -519,68 +521,88 @@ with tab_screener:
 
     if run or "screener_result" in st.session_state:
         if run:
-            rows = []
-            progress = st.progress(0.0, text="Mengambil data...")
-            for i, tk in enumerate(tickers):
-                try:
-                    raw = fetch_data(tk, period=FETCH_PERIOD)
-                    if raw.empty or len(raw) < 60:
-                        continue
-                    ind = compute_indicators(raw)
-                    result = score_stock(ind)
-                    if result is None:
-                        continue
-                    rows.append({
-                        "Ticker": tk,
-                        "Sinyal": result["signal"],
-                        "Skor": result["score"],
-                        "Close": result["close"],
-                        "Chg %": result["change_pct"],
-                        "RSI14": result["rsi"],
-                        "Vol Ratio": result["vol_ratio"],
-                        "Stop Loss": result["stop_loss"],
-                        "Take Profit": result["take_profit"],
-                        "R:R": result["rr_ratio"],
-                        "Alasan": " | ".join(result["reasons"]),
-                    })
-                except Exception as e:
-                    st.warning(f"Gagal ambil data {tk}: {e}")
-                progress.progress((i + 1) / len(tickers), text=f"Memproses {tk}...")
-            progress.empty()
-            df_result = pd.DataFrame(rows).sort_values("Skor", ascending=False).reset_index(drop=True)
-            st.session_state["screener_result"] = df_result
+            if not tickers:
+                st.warning(
+                    "⚠️ Daftar ticker masih kosong. Pilih sektor/grup di sidebar, atau klik "
+                    "**📋 Muat Ticker Default**, lalu jalankan screener lagi."
+                )
+                st.session_state["screener_result"] = pd.DataFrame()
+            else:
+                rows = []
+                progress = st.progress(0.0, text="Mengambil data...")
+                for i, tk in enumerate(tickers):
+                    try:
+                        raw = fetch_data(tk, period=FETCH_PERIOD)
+                        if raw.empty or len(raw) < 60:
+                            continue
+                        ind = compute_indicators(raw)
+                        result = score_stock(ind)
+                        if result is None:
+                            continue
+                        rows.append({
+                            "Ticker": tk,
+                            "Sinyal": result["signal"],
+                            "Skor": result["score"],
+                            "Close": result["close"],
+                            "Chg %": result["change_pct"],
+                            "RSI14": result["rsi"],
+                            "Vol Ratio": result["vol_ratio"],
+                            "Stop Loss": result["stop_loss"],
+                            "Take Profit": result["take_profit"],
+                            "R:R": result["rr_ratio"],
+                            "Alasan": " | ".join(result["reasons"]),
+                        })
+                    except Exception as e:
+                        st.warning(f"Gagal ambil data {tk}: {e}")
+                    progress.progress((i + 1) / len(tickers), text=f"Memproses {tk}...")
+                progress.empty()
+
+                if rows:
+                    df_result = pd.DataFrame(rows).sort_values("Skor", ascending=False).reset_index(drop=True)
+                else:
+                    st.warning(
+                        "⚠️ Tidak ada data yang berhasil diproses untuk ticker yang dipilih. "
+                        "Kemungkinan penyebab: koneksi ke Yahoo Finance sedang bermasalah, "
+                        "ticker salah ketik, atau data historisnya kurang dari 60 hari. "
+                        "Coba lagi beberapa saat, atau cek kembali daftar ticker Anda."
+                    )
+                    df_result = pd.DataFrame()
+                st.session_state["screener_result"] = df_result
 
         df_result = st.session_state["screener_result"]
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Strong Buy", int((df_result["Sinyal"] == "Strong Buy").sum()))
-        c2.metric("Buy", int((df_result["Sinyal"] == "Buy").sum()))
-        c3.metric("Hold/Watch", int((df_result["Sinyal"] == "Hold/Watch").sum()))
-        c4.metric("Sell/Strong Sell", int(df_result["Sinyal"].isin(["Sell", "Strong Sell"]).sum()))
+        if df_result.empty:
+            st.info("Belum ada hasil untuk ditampilkan. Pilih ticker lalu jalankan screener lagi.")
+        else:
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Strong Buy", int((df_result["Sinyal"] == "Strong Buy").sum()))
+            c2.metric("Buy", int((df_result["Sinyal"] == "Buy").sum()))
+            c3.metric("Hold/Watch", int((df_result["Sinyal"] == "Hold/Watch").sum()))
+            c4.metric("Sell/Strong Sell", int(df_result["Sinyal"].isin(["Sell", "Strong Sell"]).sum()))
 
-        def highlight_signal(row):
-            color = SIGNAL_COLOR.get(row["Sinyal"], "#ffffff")
-            return [f"background-color: {color}22"] * len(row)
+            def highlight_signal(row):
+                color = SIGNAL_COLOR.get(row["Sinyal"], "#ffffff")
+                return [f"background-color: {color}22"] * len(row)
 
-        st.dataframe(
-            df_result.style.apply(highlight_signal, axis=1).format({
-                "Close": "{:,.0f}",
-                "Chg %": "{:,.2f}",
-                "RSI14": "{:,.1f}",
-                "Vol Ratio": "{:,.2f}",
-                "Stop Loss": "{:,.0f}",
-                "Take Profit": "{:,.0f}",
-                "R:R": "1 : {:,.2f}",
-            }, na_rep="-"),
-            use_container_width=True,
-            height=560,
-        )
-        st.caption(
-            "**R:R (Risk:Reward)** = potensi profit ke Take Profit dibagi potensi rugi ke "
-            "Stop Loss. R:R ≥ 1.5 umumnya dianggap sehat secara manajemen risiko, tapi tetap "
-            "cek konteks chart-nya sendiri."
-        )
-        st.caption("Klik header kolom untuk mengurutkan. Buka tab 'Chart Detail' untuk analisis per saham.")
+            st.dataframe(
+                df_result.style.apply(highlight_signal, axis=1).format({
+                    "Close": "{:,.0f}",
+                    "Chg %": "{:,.2f}",
+                    "RSI14": "{:,.1f}",
+                    "Vol Ratio": "{:,.2f}",
+                    "Stop Loss": "{:,.0f}",
+                    "Take Profit": "{:,.0f}",
+                    "R:R": "1 : {:,.2f}",
+                }, na_rep="-"),
+                use_container_width=True,
+                height=560,
+            )
+            st.caption(
+                "**R:R (Risk:Reward)** = potensi profit ke Take Profit dibagi potensi rugi ke "
+                "Stop Loss. R:R ≥ 1.5 umumnya dianggap sehat secara manajemen risiko, tapi tetap "
+                "cek konteks chart-nya sendiri."
+            )
+            st.caption("Klik header kolom untuk mengurutkan. Buka tab 'Chart Detail' untuk analisis per saham.")
     else:
         st.info("Klik **Jalankan Screener** untuk mengambil data & menghitung sinyal semua ticker di sidebar.")
 
@@ -680,6 +702,22 @@ with tab_guide:
     st.subheader("Cara Pakai & Metodologi")
     st.markdown(
         """
+### Penjelasan Header Kolom (Tab Screener)
+
+| Kolom | Penjelasan |
+|---|---|
+| **Ticker** | Kode saham di Yahoo Finance (format `KODE.JK`). |
+| **Sinyal** | Klasifikasi akhir: Strong Buy, Buy, Hold/Watch, Sell, atau Strong Sell — hasil dari total Skor. |
+| **Skor** | Nilai -100 s/d 100 dari kombinasi 6 indikator teknikal (lihat bagian Metodologi di bawah). |
+| **Close** | Harga penutupan (Close) pada hari data terakhir yang tersedia. |
+| **Chg %** | Persentase perubahan harga Close terhadap hari sebelumnya. |
+| **RSI14** | Relative Strength Index periode 14 hari. Di bawah 30 = oversold, di atas 70 = overbought. |
+| **Vol Ratio** | Rasio volume hari terakhir dibanding rata-rata volume 20 hari. Di atas 1.5 dianggap lonjakan volume. |
+| **Stop Loss** | Estimasi level batas rugi, dihitung dari support/ATR terdekat di bawah harga. |
+| **Take Profit** | Estimasi level target profit, dihitung dari resistance/ATR terdekat di atas harga. |
+| **R:R** | Risk:Reward — potensi profit ke Take Profit dibagi potensi rugi ke Stop Loss. Semakin tinggi semakin baik (≥1.5 umumnya dianggap sehat). |
+| **Alasan** | Rincian indikator apa saja yang menyumbang ke Skor saham tersebut. |
+
 ### Metodologi Skor
 Skor total (-100 s/d 100) dibentuk dari kombinasi 6 sinyal teknikal:
 1. **Trend** — posisi harga vs MA50/MA200
@@ -700,9 +738,5 @@ Sell (-39 s/d -15) · Strong Sell (≤-40)
 - **Data yfinance** untuk saham IDX kadang delay atau ada gap; selalu
   cross-check harga real-time di aplikasi sekuritas sebelum eksekusi order.
 - Ini adalah **alat bantu**, keputusan akhir & risiko tetap di tangan Anda.
-
-### Deploy
-- Lokal: `streamlit run app.py`
-- Gratis online: push ke GitHub lalu deploy via [share.streamlit.io](https://share.streamlit.io)
         """
     )
