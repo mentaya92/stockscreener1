@@ -386,6 +386,19 @@ def render_candlestick(df: pd.DataFrame, ticker: str):
     fig.update_yaxes(tickformat=",.0f", row=1, col=1)
     fig.update_yaxes(tickformat=",.0f", row=2, col=1)
     fig.update_yaxes(tickformat=",.1f", row=3, col=1)
+
+    # Hilangkan celah kosong di chart akibat weekend & hari libur/tanggal
+    # tanpa transaksi -- tanpa ini, Plotly menganggap sumbu tanggal berjalan
+    # terus-menerus sehingga hari tanpa data terlihat seperti "lubang" kosong.
+    if len(df.index) > 1:
+        all_bdays = pd.bdate_range(start=df.index.min(), end=df.index.max())
+        traded_dates = set(df.index.normalize())
+        missing_bdays = [d.strftime("%Y-%m-%d") for d in all_bdays if d not in traded_dates]
+        rangebreaks = [dict(bounds=["sat", "mon"])]  # sembunyikan Sabtu-Minggu
+        if missing_bdays:
+            rangebreaks.append(dict(values=missing_bdays))  # sembunyikan hari libur nasional
+        fig.update_xaxes(rangebreaks=rangebreaks)
+
     return fig
 
 
